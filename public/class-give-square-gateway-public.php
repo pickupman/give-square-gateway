@@ -80,13 +80,40 @@ class Give_Square_Gateway_Public {
 
 		$display_label_field = get_post_meta( $form_id, '_give_checkout_label', true );
 		$display_label       = ( ! empty( $display_label_field ) ? $display_label_field : esc_html__( 'Donate Now', 'give' ) );
+
+		give_print_errors( $form_id );
+
 		ob_start(); ?>
+
 		<div class="give-submit-button-wrap give-clearfix">
 			<input type="submit" class="give-submit give-btn" id="give-purchase-button" name="give-purchase" value="<?php echo $display_label; ?>"  onclick="requestCardNonce(event)"/>
 			<span class="give-loading-animation"></span>
 		</div>
 		<?php
 	}
+
+    /**
+     * Change required fields
+     * @param $required_fields
+     * @param $form_id
+     * @return array
+     */
+    public function give_square_form_required_fields( $required_fields ){
+
+        // The zip code is not passed as Square API writes this to an iFrame
+        unset($required_fields['card_zip']);
+
+        return $required_fields;
+    }
+
+    /**
+     * Disable billing address requirements
+     * @return bool
+     */
+    public function give_square_require_billing_address()
+    {
+        return false;
+    }
 
 	/**
 	* Process Square Purchase
@@ -109,10 +136,93 @@ class Give_Square_Gateway_Public {
 			'currency'        => give_get_currency(),
 			'user_info'       => $purchase_data['user_info'],
 			'status'          => 'pending',
-			'gateway'         => 'paypal'
+			'gateway'         => 'square'
 		);
 
-		var_dump($payment_data, $purchase_data);exit();
+
+        // record the pending payment
+        $payment = give_insert_payment( $payment_data );
+
+		// Get possible locations from Square Api
+		$locations = $this->get_square_locations();
+
+		// Set location as default
+        $location_id = $locations[0]->id;
+
+        // Instantiate the TransactionApi
+        $transaction_api = new \SquareConnect\Api\TransactionApi();
+
+        $request_body = array(
+                'card_nonce'   => $purchase_data['post_data']['card_nonce'],
+                'amount_money' => array(
+                        'amount'   => $purchase_data['post_data']['give-amount'] * 100,
+                        'currency' => give_get_currency()
+                ),
+                "idempotency_key" => uniqid(),
+        );
+
+        // Process the payment through the Square API
+        try
+        {
+            $transaction = $transaction_api->charge(give_get_option('square_access_token'), $location_id, $request_body);
+
+            // Set status to completed
+            give_update_payment_status($payment);
+
+            // All done. Send to success page
+            give_send_to_success_page();
+        }
+        catch (\SquareConnect\ApiException $e)
+        {
+
+            $response = $e->getResponseBody();
+
+            switch($response->errors[0]->code){
+                case('CARD_EXPIRED'):
+                    give_set_error( 'give-square-gateway-error', esc_html__( 'Credit Card is expired. ', 'give' ) );
+                    break;
+
+                case('CARD_TOKEN_USED'):
+                    give_set_error( 'give-square-gateway-error', esc_html__( 'Unable to process your payment.', 'give' ) );
+                    break;
+
+                case('INVALID_EXPIRATION'):
+                    give_set_error( 'give-square-gateway-error', esc_html__( 'Invalid expiration date.', 'give' ) );
+                    break;
+
+                case('CARD_DECLINED'):
+                    give_set_error( 'give-square-gateway-error', esc_html__( 'Credit card was declined.', 'give' ) );
+                    break;
+
+                case('CARD_DECLINED_CALL_ISSUER'):
+                    give_set_error( 'give-square-gateway-error', esc_html__( 'Credit card was declined. Please call your card issuer.', 'give' ) );
+                    break;
+
+                case('UNSUPPORTED_CARD_BRAND'):
+                    give_set_error( 'give-square-gateway-error', esc_html__( 'Credit card type is not supported. Please try again with another type.', 'give' ) );
+                    break;
+
+                default:
+                    give_set_error( 'give-square-gateway-error', esc_html__( 'This was an error processing your card. Please try again.', 'give' ) );
+                    break;
+            }
+
+            // Record the error.
+            give_record_gateway_error(
+                esc_html__( 'Payment Error', 'give' ),
+                sprintf(
+                /* translators: %s: payment data */
+                    esc_html__( 'Payment creation failed after processing through Square. Payment data: %s Square Response: %s', 'give' ),
+                    json_encode( $payment_data ),
+                    json_encode( $response )
+                ),
+                $payment
+            );
+
+            // if errors are present, send the user back to the donation form so they can be corrected
+            give_send_back_to_checkout( '?payment-mode=' . $purchase_data['post_data']['give-gateway'] );
+        }
+
 	}
 
 	/**
@@ -165,11 +275,13 @@ class Give_Square_Gateway_Public {
 	protected function square_inline_javascript($form_id) {
 		$square_application_id = give_get_option('square_application_id');
 
-		return "
-		<input type=\"hidden\" name=\"card-nonce\" id=\"card-nonce-$form_id\" value=\"\"/>
-		<script type=\"text/javascript\">
-			console.log('square_inline_javascript');
-			var applicationId = '$square_application_id';
+		ob_start();
+		?>
+		<input type="hidden" name="card_nonce" id="card_nonce-<?php echo $form_id ?>" value=""/>
+		<script type="text/javascript">
+            document.getElementById('card_nonce-<?php echo $form_id;?>').value = '';
+
+			var applicationId = '<?php echo $square_application_id;?>';
 
 			  if (applicationId == '') {
 			    alert('You need to provide a value for the applicationId variable.');
@@ -177,22 +289,22 @@ class Give_Square_Gateway_Public {
 
 			  var paymentForm = new SqPaymentForm({
 			    applicationId: applicationId,
-			    inputClass: 'sq-input',
+			    inputClass: 'give-input',
 			    inputStyles: [
 			      {
 			        fontSize: '15px'
 			      }
 			    ],
 			    cardNumber: {
-			      elementId: 'card_number-$form_id',
+			      elementId: 'card_number-<?php echo $form_id;?>',
 			      placeholder: '•••• •••• •••• ••••'
 			    },
 			    cvv: {
-			      elementId: 'card_cvc-$form_id',
+			      elementId: 'card_cvc-<?php echo $form_id;?>',
 			      placeholder: 'CVV'
 			    },
 			    expirationDate: {
-			      elementId: 'card_expiry-$form_id',
+			      elementId: 'card_expiry-<?php echo $form_id;?>',
 			      placeholder: 'MM/YY'
 			    },
 			    postalCode: {
@@ -202,18 +314,17 @@ class Give_Square_Gateway_Public {
 
 			      cardNonceResponseReceived: function(errors, nonce, cardData) {
 			        if (errors) {
-			          console.log(\"Encountered errors:\");
+			          console.log("Encountered errors:");
 
 			          errors.forEach(function(error) {
 			            console.log('  ' + error.message);
 			          });
 
-			        // No errors occurred. Extract the card nonce.
-			        } else {
-					  alert('Nonce Received: ' + nonce);
-			          document.getElementById('card-nonce-$form_id').value = nonce;
-			          document.getElementById('give-form-$form_id').submit();
 
+			        } else {
+                        // No errors occurred.
+			            document.getElementById('card_nonce-<?php echo $form_id;?>').value = nonce;
+			            document.getElementById('give-form-<?php echo $form_id;?>').submit();
 			        }
 			      },
 
@@ -247,9 +358,7 @@ class Give_Square_Gateway_Public {
 			      },
 
 			      paymentFormLoaded: function() {
-			        // Fill in this callback to perform actions after the payment form is
-			        // done loading (such as setting the postal code field programmatically).
-			        // paymentForm.setPostalCode('94103');
+
 			      }
 			    }
 			  });
@@ -258,7 +367,33 @@ class Give_Square_Gateway_Public {
 			    event.preventDefault();
 			    paymentForm.requestCardNonce();
 			  }
-		</script>";
+		</script>
+        <?php
+        $content = ob_get_contents();
+        ob_end_clean();
+
+        return $content;
+
 	}
+
+	public function get_square_locations()
+    {
+
+        $access_token = give_get_option('square_access_token');
+
+        if ( ! $access_token )
+        {
+            throw new Exception('Invalid Square.com Personal Access Token');
+        }
+
+        try{
+            $location_api = new \SquareConnect\Api\LocationApi();
+        } catch(Exception $e) {
+            echo $e->getMessage();
+        }
+
+        $locations =  json_decode($location_api->listLocations($access_token));
+        return $locations->locations;
+    }
 
 }

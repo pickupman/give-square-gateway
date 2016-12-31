@@ -123,11 +123,19 @@ class Give_Square_Gateway_Admin {
 			array(
 				'id'          => 'square_application_id',
 				'name'        => esc_attr__( 'Square Application ID', 'give' ),
-				'desc'        => esc_attr__( 'Enter the application from your Square.com account.', 'give' ),
+				'desc'        => esc_attr__( 'Enter the application ID from your Square.com account.', 'give' ),
 				'default'     => esc_attr__( '', 'give' ),
 				'row_classes' => 'give-subfield',
 				'type'        => 'text'
 			),
+            array(
+                'id'          => 'square_access_token',
+                'name'        => esc_attr__( 'Square Access Token', 'give' ),
+                'desc'        => esc_attr__( 'Enter the personal access token from your Square.com account.', 'give' ),
+                'default'     => esc_attr__( '', 'give' ),
+                'row_classes' => 'give-subfield',
+                'type'        => 'text'
+            ),
 		);
 
 		return array_merge( $settings, $check_settings );

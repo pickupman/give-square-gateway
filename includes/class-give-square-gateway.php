@@ -176,10 +176,11 @@ class Give_Square_Gateway {
 
 		$this->loader->add_action( 'give_before_cc_fields', $plugin_public, 'give_square_before_cc_fields' );
 		$this->loader->add_action( 'give_gateway_square', $plugin_public, 'give_process_square_purchase');
+        $this->loader->add_action( 'give_payment_gateways', $this, 'give_square_register_gateway' );
 
-		$this->loader->add_filter( 'give_payment_gateways', $this, 'give_square_register_gateway' );
+        $this->loader->add_filter( 'give_donation_form_required_fields', $plugin_public, 'give_square_form_required_fields');
 		$this->loader->add_filter( 'give_checkout_button_purchase', $plugin_public, 'give_square_checkout_button_purchase');
-
+        $this->loader->add_filter( 'give_require_billing_address', $plugin_public, 'give_square_require_billing_address');
 	}
 
 	/**
