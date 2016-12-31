@@ -84,7 +84,7 @@ class Give_Square_Gateway_Public {
 		give_print_errors( $form_id );
 
 		ob_start(); ?>
-
+        <div id="give-errors"></div>
 		<div class="give-submit-button-wrap give-clearfix">
 			<input type="submit" class="give-submit give-btn" id="give-square-purchase-button" name="give-purchase" value="<?php echo $display_label; ?>"  onclick="requestCardNonce(event)"/>
 			<span class="give-loading-animation"></span>
@@ -272,15 +272,16 @@ class Give_Square_Gateway_Public {
 
 	}
 
-	protected function square_inline_javascript($form_id) {
+	protected function square_inline_javascript( $form_id ) {
 		$square_application_id = give_get_option('square_application_id');
-
+        $display_label_field   = get_post_meta( $form_id, '_give_checkout_label', true );
+        $display_label         = ( ! empty( $display_label_field ) ? $display_label_field : esc_html__( 'Donate Now', 'give' ) );
 		ob_start();
 		?>
 		<input type="hidden" name="card_nonce" id="card_nonce-<?php echo $form_id ?>" value=""/>
 		<script type="text/javascript">
             document.getElementById('card_nonce-<?php echo $form_id;?>').value = '';
-
+            var btnElem;
 			var applicationId = '<?php echo $square_application_id;?>';
 
 			  if (applicationId == '') {
@@ -314,12 +315,13 @@ class Give_Square_Gateway_Public {
 
 			      cardNonceResponseReceived: function(errors, nonce, cardData) {
 			        if (errors) {
-			          console.log("Encountered errors:");
-
+			          var errorMessage = '';
 			          errors.forEach(function(error) {
-			            console.log('  ' + error.message);
+			            errorMessage += '<div class="give_error">'+error.message+'</div>';
 			          });
-
+			          document.getElementById('give-errors').innerHTML = errorMessage;
+			          btnElem.removeAttribute('disabled');
+			          btnElem.value = '<?php echo $display_label; ?>';
 
 			        } else {
                         // No errors occurred.
@@ -365,6 +367,10 @@ class Give_Square_Gateway_Public {
 
 			  function requestCardNonce(event) {
 			    event.preventDefault();
+			    document.getElementById('give-errors').innerHTML = '';
+			    btnElem = document.getElementById('give-square-purchase-button');
+			    btnElem.value="Please Wait";
+			    btnElem.setAttribute('disabled', 'disabled');
 			    paymentForm.requestCardNonce();
 			  }
 		</script>
