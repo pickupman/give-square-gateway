@@ -86,7 +86,7 @@ class Give_Square_Gateway_Public {
 		ob_start(); ?>
 
 		<div class="give-submit-button-wrap give-clearfix">
-			<input type="submit" class="give-submit give-btn" id="give-purchase-button" name="give-purchase" value="<?php echo $display_label; ?>"  onclick="requestCardNonce(event)"/>
+			<input type="submit" class="give-submit give-btn" id="give-square-purchase-button" name="give-purchase" value="<?php echo $display_label; ?>"  onclick="requestCardNonce(event)"/>
 			<span class="give-loading-animation"></span>
 		</div>
 		<?php
