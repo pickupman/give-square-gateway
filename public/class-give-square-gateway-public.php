@@ -309,7 +309,8 @@ class Give_Square_Gateway_Public {
 			      placeholder: 'MM/YY'
 			    },
 			    postalCode: {
-			      elementId: 'card_zip'
+			      elementId: 'card_zip',
+                  placeholder: 'Zip Code'
 			    },
 			    callbacks: {
 

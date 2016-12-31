@@ -1,4 +1,9 @@
-/**
- * All of the CSS for your public-facing functionality should be
- * included in this file.
- */
+iframe.give-input {
+    width: 95%;
+    border-radius: 0;
+    outline: 0;
+    color: #333;
+    background-color: #FDFDFD;
+    padding: 5px 10px;
+    border: 1px solid #ddd;
+}
